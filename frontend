@@ -1,0 +1,83 @@
+import { useState } from "react";
+
+export default function PdfTools() {
+  const [file, setFile] = useState(null);
+  const [pages, setPages] = useState("");
+  const [downloadLink, setDownloadLink] = useState(null);
+
+  const handleFileChange = (e) => {
+    setFile(Array.from(e.target.files)); // Convert FileList to an array
+  };
+
+  const handleUpload = async (action) => {
+    if (!file || file.length === 0) return;
+    
+    const formData = new FormData();
+    
+    if (action === "merge") {
+      file.forEach((f) => formData.append("files", f));
+    } else {
+      formData.append("file", file[0]);
+      if (action === "remove-pages") {
+        formData.append("pages", pages);
+      }
+    }
+    
+    try {
+      const endpoint = `/api/${action}`;
+      const response = await fetch(endpoint, {
+        method: "POST",
+        body: formData,
+      });
+      
+      if (!response.ok) throw new Error("Failed to process file");
+      
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      setDownloadLink(url);
+    } catch (error) {
+      console.error("Error processing file:", error);
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center p-4">
+      <h1 className="text-2xl font-bold mb-4">PDF Tools</h1>
+      <input
+        type="file"
+        multiple
+        onChange={handleFileChange}
+        className="mb-4"
+      />
+      <div className="flex space-x-2">
+        <button
+          onClick={() => handleUpload("merge")}
+          className="bg-blue-500 text-white px-4 py-2 rounded"
+        >
+          Merge PDFs
+        </button>
+        <button
+          onClick={() => handleUpload("remove-pages")}
+          className="bg-red-500 text-white px-4 py-2 rounded"
+        >
+          Remove Pages
+        </button>
+        <button
+          onClick={() => handleUpload("pdf-to-word")}
+          className="bg-green-500 text-white px-4 py-2 rounded"
+        >
+          Convert to Word
+        </button>
+      </div>
+      {downloadLink && (
+        <a
+          href={downloadLink}
+          download="processed.pdf"
+          className="mt-4 text-blue-600 underline"
+        >
+          Download Processed File
+        </a>
+      )}
+    </div>
+  );
+}
