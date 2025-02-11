@@ -1,0 +1,64 @@
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.responses import FileResponse
+from PyPDF2 import PdfMerger, PdfReader, PdfWriter
+import os
+import pdf2docx
+
+app = FastAPI()
+UPLOAD_DIR = "uploads"
+try:
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+except PermissionError:
+    raise RuntimeError(f"Permission denied: Unable to create directory {UPLOAD_DIR}")
+
+@app.post("/merge")
+async def merge_pdfs(files: list[UploadFile] = File(...)):
+    merger = PdfMerger()
+    file_paths = []
+    
+    for file in files:
+        file_path = os.path.join(UPLOAD_DIR, file.filename)
+        file_paths.append(file_path)
+        with open(file_path, "wb") as buffer:
+            buffer.write(await file.read())
+        merger.append(file_path)
+    
+    output_path = os.path.join(UPLOAD_DIR, "merged.pdf")
+    merger.write(output_path)
+    merger.close()
+    
+    return FileResponse(output_path, filename="merged.pdf")
+
+@app.post("/remove-pages")
+async def remove_pages(file: UploadFile = File(...), pages: str = ""):
+    try:
+        reader = PdfReader(file.file)
+        writer = PdfWriter()
+        pages_to_remove = set(map(int, pages.split(",")))
+        
+        for i in range(len(reader.pages)):
+            if i not in pages_to_remove:
+                writer.add_page(reader.pages[i])
+        
+        output_path = os.path.join(UPLOAD_DIR, "modified.pdf")
+        with open(output_path, "wb") as output_file:
+            writer.write(output_file)
+        
+        return FileResponse(output_path, filename="modified.pdf")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/pdf-to-word")
+async def pdf_to_word(file: UploadFile = File(...)):
+    try:
+        pdf_path = os.path.join(UPLOAD_DIR, file.filename)
+        docx_path = pdf_path.replace(".pdf", ".docx")
+        
+        with open(pdf_path, "wb") as buffer:
+            buffer.write(await file.read())
+        
+        pdf2docx.parse(pdf_path, docx_path)
+        
+        return FileResponse(docx_path, filename=os.path.basename(docx_path))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
